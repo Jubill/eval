@@ -126,6 +126,15 @@
         <input type="text" id="duree" placeholder="30 min">
       </div>
     </div>
+    <label class="f">Anti-triche</label>
+    <div class="grid" style="align-items:center;">
+      <div style="min-width:240px;"><label style="display:flex;gap:9px;align-items:center;font-size:14px;cursor:pointer;">
+        <input type="checkbox" id="shownote" style="width:18px;height:18px;accent-color:var(--accent);"> Afficher la note à l'élève après validation</label>
+        <div class="hint">Décoché : l'élève ne voit que son QR code et ne peut pas refaire le test « pour voir ».</div></div>
+      <div style="max-width:220px;"><label class="f" style="margin-top:0">Code prof (poste partagé)</label>
+        <input type="text" id="pin" inputmode="numeric" maxlength="8" placeholder="1234">
+        <div class="hint">Libère un poste pour l'élève suivant.</div></div>
+    </div>
   </div>
 
   <div class="card">
@@ -152,6 +161,9 @@
 <script type="text/plain" id="studentengine">var SALT="TECHNO-C4-2024-bo9";
 function H(s){var h=5381;for(var i=0;i<s.length;i++){h=((h<<5)+h+s.charCodeAt(i))>>>0;}return h.toString(36);}
 var quizEl=document.getElementById('quiz');
+var START=Date.now(), SKEY='evalC4_'+EVAL_ID;
+function lireCopie(){try{return JSON.parse(localStorage.getItem(SKEY)||'null');}catch(e){return null;}}
+function ecrireCopie(o){try{localStorage.setItem(SKEY,JSON.stringify(o));}catch(e){}}
 function render(){
   quizEl.innerHTML='';
   QUESTIONS.forEach(function(it,i){
@@ -194,20 +206,47 @@ function corriger(){
       if(H(SALT+'|'+i+'|'+ch)===it.h)total+=it.pts;
     }
   });
-  var payload={n:nom,c:classe,e:EVAL_ID,s:total,m:max};
+  if(!confirm('Valider d\u00e9finitivement ? Tu ne pourras plus modifier tes r\u00e9ponses.'))return;
+  var now=Date.now();
+  // t = heure de validation, d = dur\u00e9e pass\u00e9e sur l'\u00e9valuation (secondes) : sign\u00e9s avec la note
+  var payload={n:nom,c:classe,e:EVAL_ID,s:total,m:max,t:Math.round(now/1000),d:Math.round((now-START)/1000)};
   payload.k=H(JSON.stringify(payload)+SALT);
   var code=btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-  var res=document.getElementById('result');var pct=total/max;var bg,col;
-  if(pct>=0.8){bg='#E8F5E9';col='#1b5e20';}else if(pct>=0.5){bg='#FFF8E1';col='#7F5400';}else{bg='#FDECEA';col='#7b241c';}
-  document.getElementById('top').style.background=bg;document.getElementById('top').style.color=col;
-  document.getElementById('top').innerHTML='Note enregistr\u00e9e<span class="note">'+total+' / '+max+'</span>'+nom+(classe?(' \u2014 '+classe):'');
-  document.getElementById('codeval').textContent=code;
-  try{var qr=qrcode(0,'M');qr.addData(code);qr.make();document.getElementById('qrbox').innerHTML=qr.createImgTag(5,10);}catch(e){document.getElementById('qrbox').innerHTML='';}
-  var d=new Date();function z(n){return (n<10?'0':'')+n;}
+  var rep=[].map.call(document.querySelectorAll('#quiz input, .ident input'),function(inp){return (inp.type==='radio'||inp.type==='checkbox')?inp.checked:inp.value;});
+  var copie={code:code,total:total,max:max,nom:nom,classe:classe,date:now,rep:rep};
+  ecrireCopie(copie);
+  afficherResultat(copie,false);
+}
+function afficherResultat(c,deja){
+  var res=document.getElementById('result');var top=document.getElementById('top');
+  if(SHOW_NOTE){
+    var pct=c.total/c.max;var bg,col;
+    if(pct>=0.8){bg='#E8F5E9';col='#1b5e20';}else if(pct>=0.5){bg='#FFF8E1';col='#7F5400';}else{bg='#FDECEA';col='#7b241c';}
+    top.style.background=bg;top.style.color=col;
+    top.innerHTML=(deja?'Copie d\u00e9j\u00e0 valid\u00e9e':'Note enregistr\u00e9e')+'<span class="note">'+c.total+' / '+c.max+'</span>'+c.nom+(c.classe?(' \u2014 '+c.classe):'');
+  }else{
+    top.style.background='#E3EEF9';top.style.color='#1A3F63';
+    top.innerHTML=(deja?'Copie d\u00e9j\u00e0 valid\u00e9e':'Copie enregistr\u00e9e')+'<span class="note" style="font-size:22px">\u2713 Montre ton QR code au professeur</span>'+c.nom+(c.classe?(' \u2014 '+c.classe):'');
+  }
+  document.getElementById('codeval').textContent=c.code;
+  try{var qr=qrcode(0,'M');qr.addData(c.code);qr.make();document.getElementById('qrbox').innerHTML=qr.createImgTag(5,10);}catch(e){document.getElementById('qrbox').innerHTML='';}
+  var d=new Date(c.date);function z(n){return (n<10?'0':'')+n;}
   document.getElementById('pdate').textContent='Copie valid\u00e9e le '+z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear()+' \u00e0 '+z(d.getHours())+'h'+z(d.getMinutes());
   verrouiller(true);
-  res.className='result shown';res.scrollIntoView({behavior:'smooth',block:'center'});
+  res.className='result shown';res.scrollIntoView({behavior:deja?'auto':'smooth',block:'center'});
   document.getElementById('btnval').disabled=true;
+}
+function restaurer(){
+  var c=lireCopie();if(!c)return;
+  var inps=document.querySelectorAll('#quiz input, .ident input');
+  [].forEach.call(inps,function(inp,i){if(c.rep&&i<c.rep.length){if(inp.type==='radio'||inp.type==='checkbox')inp.checked=!!c.rep[i];else inp.value=c.rep[i];}});
+  afficherResultat(c,true);
+}
+function debloquer(){
+  var pin=prompt('Code professeur pour lib\u00e9rer ce poste (nouvelle copie pour un autre \u00e9l\u00e8ve) :');
+  if(pin===null)return;
+  if(UNLOCK&&H(SALT+'|pin|'+pin.trim())===UNLOCK){try{localStorage.removeItem(SKEY);}catch(e){}location.reload();}
+  else alert('Code incorrect.');
 }
 function verrouiller(on){
   quizEl.classList.toggle('locked',on);
@@ -225,8 +264,8 @@ function verrouiller(on){
 quizEl.addEventListener('click',function(e){if(quizEl.classList.contains('locked')){e.preventDefault();}},true);
 function imprimer(){window.print();}
 function copier(){var t=document.getElementById('codeval').textContent;navigator.clipboard&&navigator.clipboard.writeText(t);var b=document.getElementById('btncopy');b.textContent='\u2713 Code copi\u00e9 !';setTimeout(function(){b.textContent='\u2398 Copier le code';},1800);}
-function recommencer(){render();verrouiller(false);document.getElementById('result').className='result';document.getElementById('btnval').disabled=false;window.scrollTo({top:0,behavior:'smooth'});}
 render();
+restaurer();
 </script>
 <script type="text/plain" id="studentcss">*{box-sizing:border-box;}
 body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;margin:0;background:var(--xpale);color:#1a1a1a;line-height:1.5;}
@@ -254,7 +293,7 @@ header h1{margin:6px 0 0;font-size:20px;}
 .bar{position:sticky;bottom:0;background:#fff;border-top:2px solid var(--c);padding:14px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;box-shadow:0 -2px 8px rgba(0,0,0,.08);}
 button{font-family:inherit;font-size:15px;font-weight:bold;padding:11px 26px;border:none;border-radius:7px;cursor:pointer;}
 .btn-corr{background:var(--c);color:#fff;}
-.btn-reset{background:#f5f5f5;color:#4a4a4a;border:1px solid #ccc;}
+.unlock{display:block;margin:10px auto 0;background:none;border:none;color:#888;font-size:12px;font-weight:normal;text-decoration:underline;padding:4px;}
 .result{display:none;margin:16px 0;border-radius:10px;overflow:hidden;border:1px solid #ccc;}
 .result.shown{display:block;}
 .result .top{text-align:center;font-size:24px;font-weight:bold;padding:20px;}
@@ -281,7 +320,7 @@ footer{text-align:center;font-size:12px;color:#4a4a4a;padding:20px;}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   body{background:#fff;font-size:10.5pt;line-height:1.35;}
   .wrap{max-width:none;padding:0;}
-  .bar,.btn-copy,.btn-print,.warn,.consigne,footer,.qrlabel{display:none !important;}
+  .bar,.btn-copy,.btn-print,.warn,.consigne,footer,.qrlabel,.unlock{display:none !important;}
   .print-only{display:block;}
   header{padding:10px 14px;border-radius:0;}
   header h1{font-size:15pt;}
@@ -478,12 +517,14 @@ function updateCounts(live){
 }
 
 // ───────── Helpers export ─────────
+function pinHash(){ var p=(document.getElementById('pin').value||'').trim(); return p?H(SALT+'|pin|'+p):''; }
 function slug(s){ return (s||'evaluation').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40)||'evaluation'; }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
 function validate(){
   sync();
   if(!state.questions.length){ alert('Ajoute au moins une question.'); return false; }
+  if(!(document.getElementById('pin').value||'').trim()){ alert('Choisis un code prof (anti-triche) pour pouvoir libérer un poste partagé.'); document.getElementById('pin').focus(); return false; }
   for(var i=0;i<state.questions.length;i++){
     var q=state.questions[i];
     if(!q.q.trim()){ alert('Question '+(i+1)+' : énoncé vide.'); return false; }
@@ -544,19 +585,20 @@ function exportEleve(){
     '<div class="ident"><span><label>NOM :</label> <input type="text" id="nom" placeholder="DUPONT" autocomplete="family-name"></span>'+
     '<span><label>Prénom :</label> <input type="text" id="prenom" placeholder="Léa" autocomplete="given-name"></span>'+
     '<span><label>Classe :</label> <input type="text" id="classe" placeholder="classe…"></span></div>\n'+
-    '<div class="consigne">Réponds à toutes les questions puis clique sur « Valider ». Ta note et un code-résultat (avec QR code) s\u2019affichent : montre-les au professeur. Tu peux ensuite imprimer ta copie pour la coller dans ton cahier. Les bonnes réponses ne sont pas affichées.</div>\n'+
+    '<div class="consigne">Réponds à toutes les questions puis clique sur « Valider ». <strong>Une seule validation est possible.</strong> Un code-résultat (avec QR code) s\u2019affiche : montre-le au professeur. Tu peux ensuite imprimer ta copie pour la coller dans ton cahier. Les bonnes réponses ne sont pas affichées.</div>\n'+
     '<div id="quiz"></div>\n'+
     '<div class="result" id="result"><div class="toparea"><div class="top" id="top"></div><div class="pdate" id="pdate"></div>'+
     '<button class="btn-print" onclick="imprimer()">\ud83d\udda8 Imprimer ma copie (A4)</button></div>'+
     '<div class="codebox"><p><strong>Ton code-résultat</strong> (à montrer ou envoyer au professeur) :</p>'+
     '<div class="qrwrap"><div id="qrbox"></div><p class="qrlabel">\u2191 Le professeur scanne ce QR code</p></div>'+
     '<div class="code" id="codeval"></div><button class="btn-copy" id="btncopy" onclick="copier()">\u2398 Copier le code</button>'+
-    '<div class="warn">Ce code contient ton nom et ta note. Ne le modifie pas : toute modification est détectée.</div></div></div>\n'+
+    '<div class="warn">Ce code contient ton nom et ta note. Ne le modifie pas : toute modification est détectée.</div>'+
+    '<button class="unlock" onclick="debloquer()">Poste partag\u00e9 : nouvelle copie (code prof)</button></div></div>\n'+
     '<div class="signature print-only"><div>Observations du professeur :</div><div>Signature des responsables légaux :</div></div>\n'+
     '<div class="bar"><button class="btn-corr" id="btnval" onclick="corriger()">\u2713 Valider mon évaluation</button>'+
-    '<button class="btn-reset" onclick="recommencer()">\u21ba Recommencer</button></div>\n'+
+    '</div>\n'+
     '<footer>Évaluation auto-notée · Sans corrigé élève · QR code · Copie imprimable · Hors connexion</footer>\n</div>\n'+
-    '<scr'+'ipt>\n'+qrlib+'\nvar EVAL_ID='+JSON.stringify(evalId)+';\nvar QUESTIONS='+JSON.stringify(stripped)+';\n'+engine+'\n<\/scr'+'ipt>\n</body>\n</html>';
+    '<scr'+'ipt>\n'+qrlib+'\nvar EVAL_ID='+JSON.stringify(evalId)+';\nvar SHOW_NOTE='+(document.getElementById('shownote').checked?'true':'false')+';\nvar UNLOCK='+JSON.stringify(pinHash())+';\nvar QUESTIONS='+JSON.stringify(stripped)+';\n'+engine+'\n<\/scr'+'ipt>\n</body>\n</html>';
 
   download('eval_'+evalId+'_eleve.html', html);
   toast('✓ Page élève exportée');
@@ -597,7 +639,7 @@ function exportCorrige(){
 // ───────── Enregistrer / charger projet ─────────
 function saveProject(){
   sync();
-  var proj={niveau:state.niveau,snt:state.snt,titre:document.getElementById('titre').value,meta:document.getElementById('meta').value,duree:document.getElementById('duree').value,questions:state.questions};
+  var proj={niveau:state.niveau,snt:state.snt,titre:document.getElementById('titre').value,meta:document.getElementById('meta').value,duree:document.getElementById('duree').value,shownote:document.getElementById('shownote').checked,pin:document.getElementById('pin').value,questions:state.questions};
   download(slug(document.getElementById('titre').value)+'_projet.json', JSON.stringify(proj,null,2), 'application/json');
   toast('💾 Projet enregistré');
 }
@@ -611,6 +653,8 @@ function loadProject(file){
       document.getElementById('titre').value=p.titre||'';
       document.getElementById('meta').value=p.meta||'';
       document.getElementById('duree').value=p.duree||'';
+      document.getElementById('shownote').checked=!!p.shownote;
+      document.getElementById('pin').value=p.pin||'';
       renderQuestions(); toast('📂 Projet chargé');
     }catch(e){ alert('Fichier projet illisible.'); }
   };

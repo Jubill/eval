@@ -171,9 +171,13 @@ function render(){
   });
 }
 function corriger(){
-  var nom=(document.getElementById('nom').value||'').trim();
+  var nomF=(document.getElementById('nom').value||'').trim().toUpperCase();
+  var prenom=(document.getElementById('prenom').value||'').trim();
+  document.getElementById('nom').value=nomF;
+  var nom=(nomF+' '+prenom).trim();
   var classe=(document.getElementById('classe').value||'').trim();
-  if(!nom){alert('Saisis ton NOM et ton prénom avant de valider.');return;}
+  if(!nomF){alert('Saisis ton NOM avant de valider.');document.getElementById('nom').focus();return;}
+  if(!prenom){alert('Saisis ton prénom avant de valider.');document.getElementById('prenom').focus();return;}
   var total=0,max=0;
   QUESTIONS.forEach(function(it,i){
     max+=it.pts;
@@ -537,7 +541,8 @@ function exportEleve(){
     ':root{--c:'+t.c+';--fonce:'+t.fonce+';--pale:'+t.pale+';--xpale:'+t.xpale+';}\n'+css+'\n</style>\n</head>\n<body>\n<div class="wrap">\n'+
     '<header><div class="niveau">'+esc(niveauLabel())+'</div><h1>'+titre+'</h1></header>\n'+
     '<div class="sub"><span>'+meta+'</span><span>Durée : '+duree+'</span><span><strong>Total : / '+total+' points</strong></span></div>\n'+
-    '<div class="ident"><span><label>NOM Prénom :</label> <input type="text" id="nom" placeholder="DUPONT Léa"></span>'+
+    '<div class="ident"><span><label>NOM :</label> <input type="text" id="nom" placeholder="DUPONT" autocomplete="family-name"></span>'+
+    '<span><label>Prénom :</label> <input type="text" id="prenom" placeholder="Léa" autocomplete="given-name"></span>'+
     '<span><label>Classe :</label> <input type="text" id="classe" placeholder="classe…"></span></div>\n'+
     '<div class="consigne">Réponds à toutes les questions puis clique sur « Valider ». Ta note et un code-résultat (avec QR code) s\u2019affichent : montre-les au professeur. Tu peux ensuite imprimer ta copie pour la coller dans ton cahier. Les bonnes réponses ne sont pas affichées.</div>\n'+
     '<div id="quiz"></div>\n'+
